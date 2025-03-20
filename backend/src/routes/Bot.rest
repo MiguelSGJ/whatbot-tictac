@@ -1,0 +1,51 @@
+GET http://localhost:4006/bot/v1/qrcode/basemed
+
+###
+
+POST http://localhost:3000/bot
+Content-Type: application/json
+
+{
+    "name":"fdssdf"
+}
+###
+GET http://localhost:3000/bot
+
+###
+
+GET http://localhost:3000/bot/start
+
+###
+
+PUT http://localhost:4010/finalitario/iptu/atualizarBoletosAtrasados
+Content-Type: application/json
+
+{
+    "property_id":"01.01.038.0024.001"
+}
+###
+
+PUT http://localhost:4006/bot/v1/message
+Content-Type: application/json
+
+{
+    "name":"Raerio",
+    "typed":"file",
+    "textk":"01.01.038.0024.001",
+    "textd":"05032766429",
+    "text":"1",
+    "from": "558496531316@c.us"
+}
+###
+GET http://localhost:4006/bot/v1/init
+
+###
+GET http://localhost:3000/bot/v1/test/upload
+
+###
+PUT http://localhost:4010/finalitario/certidao/negativaImovel
+Content-Type: application/json
+
+{
+    "property_id":"01.01.038.0024.001"
+}

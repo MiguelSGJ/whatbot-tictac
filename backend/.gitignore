@@ -1,0 +1,40 @@
+# See http://help.github.com/ignore-files/ for more about ignoring files.
+
+# dependencies
+**/node_modules/
+**/tokens/
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# yarn
+
+yarn.lock
+yarn-error.log
+#env
+
+.env
+
+#migration
+
+pdf/
+pdf2/
+pdf.rar
+properties_Apodi.pdf

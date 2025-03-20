@@ -1,0 +1,117 @@
+[{
+    "id": "jaofe",
+    "_key": "jaofe",
+    "intro": {
+      "type": "INTRO",
+      "text": "Seja bem vindo ao canal do asistente virtural de Jaofe.\n",
+      "jump": "option:/start"
+    },
+    "options": [
+      {
+        "text": "Deseja iniciar um atendimento?\n",
+        "id": "/start",
+        "type": "OPTION",
+        "list": [
+          {
+            "id": "1",
+            "text": "Sim.\n",
+            "onSelect": {
+              "jump": "option:/main"
+            }
+          },
+          {
+            "id": "2",
+            "text": "Não.\n",
+            "onSelect": {
+              "jump": "info:/exit"
+            }
+          }
+        ]
+      },
+      {
+        "text": "Escolha uma dentre as opções listadas abaixo.\n",
+        "id": "/main",
+        "type": "OPTION",
+        "list": [
+          {
+            "id": "1",
+            "text": "Cadastrar uma pessoa.\n",
+            "comments": "Cadastrar uma pessoa.",
+            "onSelect": {
+              "jump": "form:/cadPessoa"
+            }
+          },
+          {
+            "id": "2",
+            "text": "Cadastrar um Usuário.\n",
+            "comments": "Cadastrar um Usuário.",
+            "onSelect": {
+              "jump": "form:/cadUser"
+            }
+          },
+          {
+            "id": "3",
+            "text": "Finalizar Atendimento.\n",
+            "onSelct": {
+              "jump": "page:exit"
+            }
+          }
+        ]
+      }
+    ],
+    "forms": [
+      {
+        "id": "/cadPessoa",
+        "text": "Para dar prosseguimento ao atendimento, informe os dados solicitados a seguir.\n",
+        "type": "FORM",
+        "list": [
+          {
+            "id": "name",
+            "text": "Para dar prosseguimento ao atendimento, informe o seu nome completo.\n",
+            "format": "text"
+          },
+          {
+            "id": "birthDate",
+            "text": "Para dar prosseguimento ao atendimento, informe sua data de nascimento.\n",
+            "format": "text"
+          },
+          {
+            "id": "cpf",
+            "text": "Informe o CPF.\n",
+            "format": "text"
+          }
+        ],
+        "submit": {
+          "listAtt": [
+            "name",
+            "birthDate",
+            "cpf"
+          ],
+          "route": "/jaofe/cadPessoa",
+          "jump": "option:/main"
+        }
+      }
+    ],
+    "info": [
+      {
+        "text": "O Processo foi criado com sucesso. ",
+        "id": "/exit",
+        "type": "INFO",
+        "exit": true
+      },
+      {
+        "text": "O Processo foi criado com sucesso. ",
+        "id": "/confirmacao",
+        "type": "INFO",
+        "exit": true,
+        "prepare": {
+          "listAtt": [],
+          "content": {
+            "id": "confirmacaoId"
+          },
+          "route": "/basemed/agendamento"
+        }
+      }
+    ]
+  }
+]
