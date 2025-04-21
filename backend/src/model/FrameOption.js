@@ -21,24 +21,34 @@ class FrameOption {
     fillList(dataList = []) {
         console.log("fillOptionList");
         console.log(dataList);
-        this.list = []
+    
+        if (dataList && dataList.media && Array.isArray(dataList.list)) {
+            this.media = dataList.media[0] || null; 
+            dataList = dataList.list; 
+        }
+    
+        if (!Array.isArray(dataList)) {
+            console.log("Lista vazia ou inválida.");
+            return;
+        }
+    
         dataList.forEach((d, i) => {
             let op = {
                 id: (i + 1).toString(),
                 text: d.value,
                 content: {
                     id: {
-                        name:this.prepare.content.id,
-                        value:d.id,
+                        name: this.prepare?.content?.id || "",
+                        value: d.id,
                     },
                     value: d.value
                 },
-                onSelect: this.prepare.onSelect
-            }
-            this.list.push(op)
-        })
+                onSelect: this.prepare?.onSelect || null
+            };
+            this.list.push(op);
+        });
     }
-
+    
     getResume() {
         let text = this.text;
 

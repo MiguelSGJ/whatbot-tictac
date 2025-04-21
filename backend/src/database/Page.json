@@ -29,6 +29,29 @@
         ]
       },
       {
+          "text": "Observe o conteúdo apresentado e selecione, dentre as opções abaixo, aquela que melhor descreve ou representa o que você está vendo na imagem acima.\n",
+          "id": "/imageAssessment",
+          "type": "OPTION",
+          "list": [],
+          "prepare": {
+            "content": {
+              "id": "imageAssessmentId"
+            },
+            "onSelect": {
+              "jump": "info:/exit"
+            },
+            "media": {
+              "route": "/jaofe/imageAssessment",
+              "acceptedTypes": [
+                "IMAGE",
+                "VIDEO",
+                "AUDIO",
+                "GIF"
+              ]
+            }
+          }
+        },
+        {
         "text": "Escolha uma dentre as opções listadas abaixo.\n",
         "id": "/main",
         "type": "OPTION",
@@ -88,29 +111,25 @@
             "cpf"
           ],
           "route": "/jaofe/cadPessoa",
-          "jump": "option:/main"
+          "jump": "option:/imageAssessment"
         }
       }
     ],
     "info": [
       {
-        "text": "O Processo foi criado com sucesso. ",
+        "text": "Questionario realizado com sucesso sua taxa de acerto foi de 100%. ",
         "id": "/exit",
         "type": "INFO",
+        "media": {
+          "route": "/jaofe/imageAssessment",
+          "acceptedTypes": [
+            "IMAGE",
+            "VIDEO",
+            "AUDIO",
+            "GIF"
+          ]
+        },
         "exit": true
-      },
-      {
-        "text": "O Processo foi criado com sucesso. ",
-        "id": "/confirmacao",
-        "type": "INFO",
-        "exit": true,
-        "prepare": {
-          "listAtt": [],
-          "content": {
-            "id": "confirmacaoId"
-          },
-          "route": "/basemed/agendamento"
-        }
       }
     ]
   }

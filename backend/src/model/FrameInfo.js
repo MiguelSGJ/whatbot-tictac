@@ -1,45 +1,41 @@
-
 class FrameInfo {
-
     constructor(frame) {
         this.frame = { ...frame };
-        this.prepare = frame.prepare;
-        this.list = frame.list;
-        this.text = frame.text
-        this.exit = frame.exit || false
+        this.text = frame.text;
+        this.mediaRoute = frame.media?.route || null;
+        this.acceptedTypes = frame.media?.acceptedTypes || [];
+        this.exit = frame.exit || false;
     }
 
     parserText(data) {
-        console.log("parserText");
-
-        let text = this.frame.text;
+        let text = this.text;
         for (let att in data) {
             text = text.replace(att, data[att]);
         }
-
-        text = text.replace(/@/g, "");
-
-        return text;
+        return text.replace(/@/g, "");
     }
 
     extractAttData(dataToSubmit) {
-        console.log("extractAttData");
-        let result = {}
-        for(let i=0;i<this.prepare.listAtt.length;i++) {
-            let att = this.prepare.listAtt[i]
+        let result = {};
+        if (this.prepare && this.prepare.listAtt) {
+          for (let att of this.prepare.listAtt) {
             result[att] = dataToSubmit[att];
+          }
         }
         return result;
-    }    
-
+      }
+      
     getResume(data) {
         console.log("FrameInfo.getResume");
 
-        let text = this.parserText(data);
+        const text = this.parserText(data);
 
-        return text;
+        return { text, media: this.media || [] };
     }
 
+    setMedia(media) {
+        this.media = media;
+    }
 }
 
-module.exports = FrameInfo
+module.exports = FrameInfo;

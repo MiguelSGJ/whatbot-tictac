@@ -1,5 +1,9 @@
 # See http://help.github.com/ignore-files/ for more about ignoring files.
 
+# WhatsApp Web.js session data
+.wwebjs_auth/
+.wwebjs_cache/
+
 # dependencies
 **/node_modules/
 **/tokens/

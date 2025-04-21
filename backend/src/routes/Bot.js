@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { Client, LocalAuth } = require("whatsapp-web.js");
+const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const QRCode = require("qrcode");
 const Bot = require("../model/Bot");
 const Oracle = require("../model/Oracle");
@@ -89,33 +89,62 @@ router.get("/qrcode/:bot_name", async (req, res) => {
 function start(client) {
   client.on("message", async (message) => {
     console.log(`Mensagem recebida de ${message.from}: ${message.body}`);
-    if (
-      [
-        "558481671849@c.us",
-        "558496914722@c.us",
-        "558496245247@c.us",
-        "558496531316@c.us",
-        "558496345257@c.us",
-        "558499076778@c.us",
-      ].includes(message.from) &&
-      !message.from.includes("@g.us")
-    ) {
-      let from = message.from;
-      let text = message.body.toLowerCase(); 
-      let name = message._data.notifyName;
-      let contact;
 
-      if (!poolContact.isContact(from)) {
-        contact = await poolContact.newContact(name, from);
-      } else {
-        contact = await poolContact.getContact(from);
-      }
+    const allowedNumbers = [
+      "558481671849@c.us",
+      "558496914722@c.us",
+      "558496245247@c.us",
+      "558496531316@c.us",
+      "558496345257@c.us",
+      "558499076778@c.us",
+      "558481553418@c.us",
+    ];
+
+    if (allowedNumbers.includes(message.from) && !message.from.includes("@g.us")) {
+      const from = message.from;
+      const text = message.body.toLowerCase();
+      const name = message._data.notifyName;
+
+      let contact = poolContact.isContact(from)
+        ? await poolContact.getContact(from)
+        : await poolContact.newContact(name, from);
 
       await bot.receive(contact, text);
 
-      let pendingToDelivery = contact.getPendingToDelivery();
-      let txt = pendingToDelivery.map(element => element.text).join("");
-      await client.sendMessage(message.from, txt);
+      const pendingToDelivery = contact.getPendingToDelivery();
+
+      const mimeExtensionMap = {
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'audio/ogg': 'ogg',    
+        'audio/mpeg': 'mp3',
+        'audio/wav': 'wav',
+        'video/mp4': 'mp4',
+      };
+      
+      for (const element of pendingToDelivery) {
+        if (element.media) {
+          for (const media of element.media) {
+            const extension = mimeExtensionMap[media.mimeType] || 'bin';
+            const fileName = `file.${extension}`;
+            const messageMedia = new MessageMedia(media.mimeType, media.data, fileName);
+      
+            // Configura as opções de envio
+            const options = {};
+            if (media.mimeType === 'video/mp4' && media.sendAsGif) {
+              options.sendVideoAsGif = true;
+            }
+            // Se for áudio e estiver em OGG, envia como voice note
+            if (media.mimeType === 'audio/ogg') {
+              options.sendAudioAsVoice = true;
+            }
+            await client.sendMessage(from, messageMedia, options);
+          }
+        }
+        if (element.text) {
+          await client.sendMessage(from, element.text);
+        }
+      }
     }
   });
 }

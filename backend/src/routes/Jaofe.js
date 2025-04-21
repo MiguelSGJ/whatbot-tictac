@@ -1,6 +1,8 @@
 const router = require('express').Router()
 //const db = require('../config/database');
 const Oracle = require('../model/Oracle');
+const fss = require("fs");
+const path = require("path");
 //const moment = require('moment')
 //const fs = require('fs/promises');
 //const { console } = require('inspector');
@@ -19,12 +21,13 @@ const oracle = new Oracle(process.env.BACKEND_ORACLE_HOST);
 
 })()
 */
+
 router.put('/cadPessoa', async (req, res) => {
   console.log("/cadPessoa");
 
   console.log("esse é o texto",req.body)
 
-  user = await oracle.sendData("/jaofe/bot/cadPessoa",req.body)        
+  user = await oracle.sendData("/jaofe/person",req.body)        
   res.send(req.body)
 /*  let {num_days, service_key} = req.body;
 
@@ -44,7 +47,6 @@ router.put('/cadPessoa', async (req, res) => {
   //res.send({ "isReturnData": true, "data": result });
 
 })
-
 
 router.put('/exames', async (req, res) => {
   console.log("/exames");
@@ -75,7 +77,35 @@ const result = [
 
 })
 
+router.put("/imageAssessment", async (req, res) => {
+  console.log("/imageAssessment");
 
+  const result = [
+    { id: "Banana", value: "Banana\n" },
+    { id: "Uva", value: "Uva\n" },
+    { id: "Maçã", value: "Maçã\n" },
+    { id: "Laranja", value: "Laranja\n" },
+  ];
+
+  const mediaPath = path.join(__dirname, "../media/teste.jpeg");
+  const base64Media = fss.readFileSync(mediaPath, { encoding: "base64" });
+
+  const media = [
+    {
+      type: "IMAGE",
+      mimeType: "image/jpg",
+      data: base64Media,
+    },
+  ];
+
+  res.send({
+    isReturnData: true,
+    data: {
+      media: media,
+      list: result,
+    },
+  });
+});
 
 router.put('/consultas', async (req, res) => {
   console.log("/consultas");
@@ -144,7 +174,6 @@ router.put('/buscarDiasConsulta', async (req, res) => {
   res.send({ "isReturnData": true, "data": formattedResult });
 });
 
-
 router.put('/agendamento', async (req, res) => {
   let {buscarDiasConsultaId, buscarDiasExameId, inputDayConsulta, inputDayExame, cpf} = req.body
 
@@ -154,7 +183,6 @@ router.put('/agendamento', async (req, res) => {
 
   res.send({ "isReturnData": true, "data": result });
 });
-
 
 router.put('/selectNeighborhood', async (req, res) => { 
   const data = {};  
@@ -178,7 +206,6 @@ router.put('/selectNeighborhood', async (req, res) => {
     "data": formattedResult
 });
 });
-
 
 router.put('/selectWay', async (req, res) => {
   let { inputWay, currentPage } = req.body;
@@ -242,8 +269,6 @@ router.put('/selectWay', async (req, res) => {
   });
 });
 
-
-
 router.put('/createPerson', async (req, res) => {
   let {name, cpf, selectNeighborhoodId, selectWayId, numberHouse} = req.body
 
@@ -284,6 +309,7 @@ router.put('/nothing', async (req, res) => {
 
   res.send({})
 })
+
 router.put('/validate/birthDate', async (req, res) => {
   console.log("/validate/birthDate");
 
