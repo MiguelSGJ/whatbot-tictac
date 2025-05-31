@@ -25,7 +25,7 @@ async function resetClient() {
 }
 
 router.get("/init", async (req, res) => {
-  const bot_name = "jaofe";
+  const bot_name = "whatTacToe";
   bot = new Bot(bot_name, new Oracle(`http://localhost:${process.env.MIDDLEWARE_PORT}`));
   await bot.loadPage(bot_name);
   console.log("nome do bot:", bot_name);
@@ -86,9 +86,13 @@ router.get("/qrcode/:bot_name", async (req, res) => {
   }
 });
 
-function start(client) {
+async function start(client) {
   client.on("message", async (message) => {
     console.log(`Mensagem recebida de ${message.from}: ${message.body}`);
+
+    const from = message.from;
+    const text = message.body.toLowerCase();
+    const name = message._data.notifyName;
 
     const allowedNumbers = [
       "558481671849@c.us",
@@ -99,52 +103,60 @@ function start(client) {
       "558499076778@c.us",
       "558481553418@c.us",
     ];
+    if (!allowedNumbers.includes(from) || from.includes("@g.us")) {
+      return;
+    }
 
-    if (allowedNumbers.includes(message.from) && !message.from.includes("@g.us")) {
-      const from = message.from;
-      const text = message.body.toLowerCase();
-      const name = message._data.notifyName;
-
-      let contact = poolContact.isContact(from)
-        ? await poolContact.getContact(from)
-        : await poolContact.newContact(name, from);
-
-      await bot.receive(contact, text);
-
-      const pendingToDelivery = contact.getPendingToDelivery();
-
-      const mimeExtensionMap = {
-        'image/jpeg': 'jpg',
-        'image/png': 'png',
-        'audio/ogg': 'ogg',    
-        'audio/mpeg': 'mp3',
-        'audio/wav': 'wav',
-        'video/mp4': 'mp4',
-      };
-      
-      for (const element of pendingToDelivery) {
-        if (element.media) {
-          for (const media of element.media) {
-            const extension = mimeExtensionMap[media.mimeType] || 'bin';
-            const fileName = `file.${extension}`;
-            const messageMedia = new MessageMedia(media.mimeType, media.data, fileName);
-      
-            // Configura as opções de envio
-            const options = {};
-            if (media.mimeType === 'video/mp4' && media.sendAsGif) {
-              options.sendVideoAsGif = true;
-            }
-            // Se for áudio e estiver em OGG, envia como voice note
-            if (media.mimeType === 'audio/ogg') {
-              options.sendAudioAsVoice = true;
-            }
-            await client.sendMessage(from, messageMedia, options);
-          }
+    // ——— Fluxo HTTP: chama /bot/v1/message e usa a resposta ———
+    let responseJson;
+    try {
+      const resp = await fetch(
+        `http://localhost:${process.env.SERVER_PORT}/bot/v1/message`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, from, name }),
         }
-        if (element.text) {
-          await client.sendMessage(from, element.text);
-        }
+      );
+      responseJson = await resp.json();
+    } catch (err) {
+      console.error("Erro ao chamar /message por HTTP:", err);
+      return;
+    }
+
+    // ——— Extrai texto e mídia do JSON retornado ———
+    const replyText = responseJson.text || "";
+    const mediaList = Array.isArray(responseJson.media)
+      ? responseJson.media
+      : [];
+
+    // ——— Envia mídias ———
+    const mimeExtensionMap = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "audio/ogg": "ogg",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+      "video/mp4": "mp4",
+    };
+    for (const m of mediaList) {
+      const extension = mimeExtensionMap[m.mimeType] || "bin";
+      const fileName = `file.${extension}`;
+      const messageMedia = new MessageMedia(m.mimeType, m.data, fileName);
+
+      const options = {};
+      if (m.mimeType === "video/mp4" && m.sendAsGif) {
+        options.sendVideoAsGif = true;
       }
+      if (m.mimeType === "audio/ogg") {
+        options.sendAudioAsVoice = true;
+      }
+      await client.sendMessage(from, messageMedia, options);
+    }
+
+    // ——— Envia texto ———
+    if (replyText) {
+      await client.sendMessage(from, replyText);
     }
   });
 }
@@ -155,22 +167,41 @@ router.get("/reset", async (req, res) => {
 });
 
 router.put("/message", async (req, res) => {
-  let { text, from, name } = req.body;
-
-  let contact;
-
-  if (!poolContact.isContact(from)) {
-    contact = await poolContact.newContact(name, from);
-  } else {
-    contact = await poolContact.getContact(from);
+  const { text, from, name } = req.body;
+  if (!from) {
+    return res
+      .status(400)
+      .json({ message: "`from` (número do usuário) é obrigatório" });
   }
 
+  // 1) Obtém ou cria o contato
+  const contact = poolContact.isContact(from)
+    ? await poolContact.getContact(from)
+    : await poolContact.newContact(name, from);
+
+  // 2) Executa o fluxo do bot
   await bot.receive(contact, text);
 
-  let pendingToDelivery = contact.getPendingToDelivery();
-  let txt = pendingToDelivery.map(element => element.text).join("");
+  // 3) Coleta pendências de entrega (texto + mídia)
+  const pending = contact.getPendingToDelivery();
+  let replyText = "";
+  const media = [];
 
-  res.send({ from: from, text: txt });
+  for (const el of pending) {
+    if (el.text) {
+      replyText += el.text;
+    }
+    if (el.media) {
+      media.push(...el.media);
+    }
+  }
+
+  // 4) Devolve texto e mídia
+  return res.json({
+    from,
+    text: replyText,
+    media,
+  });
 });
 
 module.exports = router;

@@ -27,7 +27,7 @@ router.put('/cadPessoa', async (req, res) => {
 
   console.log("esse é o texto",req.body)
 
-  user = await oracle.sendData("/jaofe/person",req.body)        
+  user = await oracle.sendData("//person",req.body)        
   res.send(req.body)
 /*  let {num_days, service_key} = req.body;
 

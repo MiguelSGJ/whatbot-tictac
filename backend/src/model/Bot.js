@@ -20,7 +20,7 @@ class Bot {
   }
 
   async loadPage(page_id) {
-    let page = await oc.getDocByKey("Page", page_id);
+    let page = await oc.getDocByKey("WhatTacToe", page_id);
 
     this.page = new Page(page);
   }
@@ -76,13 +76,13 @@ class Bot {
     return this.poolContact.getContact(number);
   }
 
-  async optionResolver(contact, choice) {
+  async optionResolver(contact, choice, dynamicJump = null) {
     console.log("optionResolver");
 
     const option = contact.support.currentFrame.getOption(choice);
 
     if (!option) {
-      let last = contact.support.geCurrentMessage();
+      let last = contact.support.getCurrentMessage();
       contact.support.resetListMessageToDelivery();
       contact.support.addCurrentMessage({
         text: `*A opção ${choice} é inválida.*\n\n`,
@@ -90,19 +90,31 @@ class Bot {
         type: "ERROR/NOSHOWOPTION",
       });
       contact.support.addCurrentMessage(last);
+      return;
+    }
+
+    if (option.id === "start") {
+      contact.opeSupport(this.page);
+    }
+
+    if (option.content) {
+      contact.support.addAttInSubmitData(
+        option.content.id.name,
+        option.content.id.value
+      );
+    }
+
+    // Resolve qual jump usar:
+    const jumpToUse =
+      dynamicJump ||
+      (option.onSelect && option.onSelect.jump) ||
+      contact.support.currentFrame.dynamicJump ||
+      null;
+
+    if (jumpToUse) {
+      await this.jumpResolver(contact, jumpToUse);
     } else {
-      if (option.id == "start") {
-        contact.opeSupport(this.page);
-      }
-
-      if (!!option.content) {
-        contact.support.addAttInSubmitData(
-          option.content.id.name,
-          option.content.id.value
-        );
-      }
-
-      await this.jumpResolver(contact, option.onSelect.jump);
+      console.warn("Nenhum jump definido para essa opção.");
     }
   }
 
@@ -111,20 +123,28 @@ class Bot {
     const frame = this.page.getFrame(path);
     let text = ``;
 
-    if (frame.type == "INFO") {
+    if (frame.type === "INFO") {
       console.log("INFO");
       contact.support.currentFrame = new FrameInfo(frame);
 
+      let dynamicJump = null; // <-- AQUI: inicia a variável
+
+      // 1) obtém mídia se houver
       if (contact.support.currentFrame.mediaRoute) {
         try {
-          const result = await this.oracle.sendData(
+          const payloadMedia = {};
+          const resultMedia = await this.oracle.sendData(
             contact.support.currentFrame.mediaRoute,
-            {}
+            payloadMedia
           );
-          if (result.isReturnData && result.data.media) {
-            contact.support.currentFrame.setMedia(result.data.media);
-            if (result.data.list) {
-              contact.support.addReturnData({ list: result.data.list });
+          if (resultMedia.isReturnData && resultMedia.data.media) {
+            contact.support.currentFrame.setMedia(resultMedia.data.media);
+            if (resultMedia.data.list) {
+              contact.support.addReturnData({ list: resultMedia.data.list });
+            }
+            if (resultMedia.data.jump) {
+              // <-- CAPTURA jump dinâmico vindo da mídia
+              dynamicJump = resultMedia.data.jump;
             }
           }
         } catch (error) {
@@ -137,25 +157,46 @@ class Bot {
         }
       }
 
+      // 2) executa prepare se existir, usando extractAttData
       const prepare = contact.support.currentFrame.prepare;
       if (prepare) {
         const dataToSubmit = contact.support.currentFrame.extractAttData(
-          contact.support.submitData
+          contact.support.submitData || {}
         );
         const r = await this.oracle.sendData(prepare.route, dataToSubmit);
         if (r.isReturnData) {
           contact.support.resetReturnData();
           contact.support.addReturnData(r.data);
+
+          if (r.data.jump) {
+            // <-- SE prepare também mandar jump, sobrescreve
+            dynamicJump = r.data.jump;
+          }
         }
       }
 
+      // 3) envia o texto/resume do INFO
       const resume = contact.support.currentFrame.getResume(
         contact.support.submitData || {}
       );
       contact.support.addCurrentMessage(resume);
 
+      // 4) prioriza qualquer jump vindo da API (mídia ou prepare)
+      if (dynamicJump) {
+        await this.jumpResolver(contact, dynamicJump);
+        return;
+      }
+
+      // 5) se não veio jump dinâmico, respeita o jump estático do frame
+      if (contact.support.currentFrame.jump) {
+        await this.jumpResolver(contact, contact.support.currentFrame.jump);
+        return;
+      }
+
+      // 6) por fim, se for exit, encerra o suporte
       if (contact.support.currentFrame.exit) {
         contact.closeSupport();
+        return;
       }
     } else if (frame.type == "FORM") {
       contact.support.currentFrame = new FrameForm(frame);
@@ -168,53 +209,119 @@ class Bot {
         text: contact.support.currentInput.text,
         type: "TEXT",
       });
-    } else if (frame.type == "OPTION") {
-      contact.support.currentFrame = new FrameOption(frame);
-      const prepare = contact.support.currentFrame.prepare;
-      console.log("Prepare");
-      console.log(prepare);
-      if (!!prepare) {
-        if (
-          contact.support.submitData &&
-          contact.support.submitData.mediaType &&
-          contact.support.submitData.mediaData
-        ) {
-          let mediaInfo = await this.processMedia(contact.support.submitData);
-          contact.support.submitData.media = mediaInfo;
-        }
-        const route =
-          prepare.media && prepare.media.route
-            ? prepare.media.route
-            : prepare.route;
-        let r;
-        try {
-          r = await this.oracle.sendData(route, contact.support.submitData);
-        } catch (error) {
-          console.error("Erro ao enviar dados (OPTION):", error);
-          contact.support.addCurrentMessage({
-            text: "Erro ao processar sua solicitação.",
-            format: "ERROR",
-          });
+    } else if (frame.type === "OPTION") {
+    console.log("Iniciando OPTION frame");
+
+    contact.support.currentFrame = new FrameOption(frame);
+    const prepare = contact.support.currentFrame.prepare;
+
+    console.log("Prepare:");
+    console.log(JSON.stringify(prepare, null, 2));
+
+    let dynamicJump = null;
+
+    if (prepare) {
+      console.log("Dados submitData antes do processMedia:");
+      console.log(JSON.stringify(contact.support.submitData, null, 2));
+
+      if (
+        contact.support.submitData &&
+        contact.support.submitData.mediaType &&
+        contact.support.submitData.mediaData
+      ) {
+        let mediaInfo = await this.processMedia(contact.support.submitData);
+        contact.support.submitData.media = mediaInfo;
+      }
+
+      console.log("Dados submitData após possível inclusão de mídia:");
+      console.log(JSON.stringify(contact.support.submitData, null, 2));
+
+      const route =
+        prepare.media && prepare.media.route
+          ? prepare.media.route
+          : prepare.route;
+
+      console.log("Rota que será usada para sendData:");
+      console.log(route);
+
+      let r;
+      try {
+        r = await this.oracle.sendData(route, contact.support.submitData);
+      } catch (error) {
+        console.error("Erro ao enviar dados (OPTION):", error);
+        contact.support.addCurrentMessage({
+          text: "Erro ao processar sua solicitação.",
+          format: "ERROR",
+        });
+        return;
+      }
+
+      console.log("Resposta recebida de sendData:");
+      console.log(JSON.stringify(r, null, 2));
+
+      // preenche a lista de opções
+      contact.support.currentFrame.fillList(r.data);
+      text = contact.support.currentFrame.getResume();
+
+      const messageData = {
+        text,
+        format: "TEXT",
+      };
+      if (r.data.media && Array.isArray(r.data.media)) {
+        messageData.media = r.data.media;
+      }
+      contact.support.addCurrentMessage(messageData);
+
+      // captura jump dinâmico, se veio
+      if (r.data.jump) {
+        console.log("Jump dinâmico detectado:");
+        console.log(JSON.stringify(r.data.jump, null, 2));
+        contact.support.currentFrame.dynamicJump = r.data.jump;
+      }
+
+      // **se a lista de opções estiver vazia, faz jump automático**
+      if (contact.support.currentFrame.list.length === 0) {
+        const dj =
+          contact.support.currentFrame.dynamicJump ||
+          contact.support.currentFrame.jump;
+        if (dj) {
+          console.log("Lista vazia: jump automático para", dj);
+          await this.jumpResolver(contact, dj);
           return;
         }
-        console.log("list property");
-        console.log(r);
-        contact.support.currentFrame.fillList(r.data);
-        text = contact.support.currentFrame.getResume();
-        const messageData = {
-          text: text,
-          format: "TEXT",
-        };
-        if (r.data.media && Array.isArray(r.data.media)) {
-          messageData.media = r.data.media;
-        }
-        contact.support.addCurrentMessage(messageData);
-      } else {
-        text = contact.support.currentFrame.getResume();
-        contact.support.addCurrentMessage({ text: text, format: "TEXT" });
       }
+
+    } else {
+      // fluxo sem prepare
+      text = contact.support.currentFrame.getResume();
+      contact.support.addCurrentMessage({ text, format: "TEXT" });
+    }
+
+    // prioriza o jump dinâmico
+    if (dynamicJump) {
+      console.log("Executando jump dinâmico...");
+      await this.jumpResolver(contact, dynamicJump);
+      return;
+    }
+
+    // caso não tenha jump dinâmico, verifica o jump estático
+    if (contact.support.currentFrame.jump) {
+      console.log("Executando jump estático...");
+      await this.jumpResolver(
+        contact,
+        contact.support.currentFrame.jump
+      );
+      return;
+    }
+
+    // encerra se for exit
+    if (contact.support.currentFrame.exit) {
+      console.log("Encerrando atendimento via exit.");
+      contact.closeSupport();
+      return;
     }
   }
+}
 
   getListAdmin() {
     return this.listAdmin;
@@ -332,7 +439,6 @@ class Bot {
       );
     });
   }
-
 
   async processMedia(content) {
     if (!content.mediaType || !content.mediaData) {

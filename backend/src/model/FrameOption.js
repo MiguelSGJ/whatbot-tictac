@@ -8,6 +8,7 @@ class FrameOption {
         this.list = option.list
         this.type = option.type
         this.jump = option.jump
+        this.dynamicJump = null; 
     }
 
     getOption(choice) {
@@ -20,22 +21,30 @@ class FrameOption {
 
     fillList(dataList = []) {
         console.log("fillOptionList");
-        console.log(dataList);
+        console.log("Dados recebidos:", dataList);
     
-        if (dataList && dataList.media && Array.isArray(dataList.list)) {
-            this.media = dataList.media[0] || null; 
-            dataList = dataList.list; 
-        }
-    
-        if (!Array.isArray(dataList)) {
-            console.log("Lista vazia ou inválida.");
+        if (dataList && Array.isArray(dataList.list)) {
+            dataList = dataList.list; // A lista está dentro de "list"
+        } else if (!Array.isArray(dataList)) {
+            console.log("dataList não é um array.");
             return;
         }
     
+        if (!Array.isArray(dataList)) {
+            console.log("dataList não é um array válido.");
+            return;
+        }
+    
+        if (dataList.media && Array.isArray(dataList.media)) {
+            this.media = dataList.media[0] || null;
+            console.log("Mídia recebida:", this.media);
+        }
+    
+        this.list = [];
         dataList.forEach((d, i) => {
             let op = {
                 id: (i + 1).toString(),
-                text: d.value,
+                text: d.value,  // Assumindo que d.value está correto
                 content: {
                     id: {
                         name: this.prepare?.content?.id || "",
@@ -47,7 +56,10 @@ class FrameOption {
             };
             this.list.push(op);
         });
+    
+        console.log("Lista preenchida:", this.list); // Verifica o que foi adicionado à lista
     }
+
     
     getResume() {
         let text = this.text;

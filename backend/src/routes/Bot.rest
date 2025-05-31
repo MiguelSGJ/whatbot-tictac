@@ -1,4 +1,4 @@
-GET http://localhost:4006/bot/v1/qrcode/basemed
+GET http://localhost:4006/bot/v1/qrcode/whatTacToe
 
 ###
 

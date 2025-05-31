@@ -1,0 +1,68 @@
+[{
+  "id": "whatTacToe",
+  "_key": "whatTacToe",
+  "intro": {
+    "type": "INTRO",
+    "text": "🎮 Seja bem-vindo ao assistente de jogos do Jaofe!\nEscolha um jogo para começar.",
+    "jump": "option:/chooseGame"
+  },
+  "options": [
+    {
+      "text": "Qual jogo você deseja jogar?\n",
+      "id": "/chooseGame",
+      "type": "OPTION",
+      "list": [
+        {
+          "id": "1",
+          "text": "Jogo da Velha",
+          "onSelect": {
+            "jump": "info:/game"
+          }
+        },
+        {
+          "id": "2",
+          "text": "Outro jogo (em breve)",
+          "onSelect": {
+            "jump": "info:/exit"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Escolha uma das jogadas disponíveis abaixo.\n",
+      "id": "/move",
+      "type": "OPTION",
+      "list": [],
+      "prepare": {
+        "content": {
+          "id": "moveId"
+        },
+        "route": "/whatTacToe/move"
+      }
+    }
+  ],
+  "forms": [],
+"info": [
+  {
+    "text": "Faça sua jogada!",
+    "id": "/game",
+    "type": "INFO",
+    "media": {
+      "route": "/whatTacToe/game",
+      "acceptedTypes": ["IMAGE", "VIDEO", "AUDIO", "GIF"]
+    }
+  },
+  {
+    "text": "Parabéns pela vitória",
+    "id": "/victory",
+    "type": "INFO",
+    "exit": true
+  },
+  {
+    "text": "Deu velha!",
+    "id": "/draw",
+    "type": "INFO",
+    "exit": true
+  }
+]
+}]
