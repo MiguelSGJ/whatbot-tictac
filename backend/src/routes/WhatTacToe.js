@@ -1,131 +1,215 @@
-const router = require('express').Router()
-const Oracle = require('../model/Oracle');
-const fss = require("fs");
-const path = require("path");
+const router = require("express").Router();
+const axios = require("axios");
+const config = require("dotenv").config();
 
-const oracle = new Oracle(process.env.BACKEND_ORACLE_HOST);
+const GAME_API_URL = process.env.GAME_API_BACKEND;
 
-const initializedGames = new Set();
-
+//
+// Inicia ou recupera um jogo, retornando imagem + gameId
+//
 router.put("/game", async (req, res) => {
-  console.log("➡️  CHEGOU EM /game:", req.body);
+  const { from } = req.body; // número de quem mandou a mensagem
+  let gameId, imageBase64, board;
 
-  let { gameId, position, from } = req.body;
-  let type;
-
-  if (!gameId) {
-    gameId = from;
-    if (initializedGames.has(gameId)) {
-      type = "move";
-      console.log("🔄 GameId já existe, é MOVE:", gameId);
+  try {
+    // Tenta criar um jogo novo
+    const resp = await axios.post(
+      `${GAME_API_URL}/api/startgame/${encodeURIComponent(from)}`
+    );
+    gameId = resp.data.gameId;
+    board = resp.data.board;
+    imageBase64 = resp.data.gameBoardImage;
+  } catch (err) {
+    // Se o backend responder 400 com game já existente, extrai os dados
+    if (err.response?.status === 400 && err.response.data.gameId) {
+      gameId = err.response.data.gameId;
+      board = err.response.data.board;
+      imageBase64 = err.response.data.gameBoardImage;
     } else {
-      type = "newGame";
-      console.log("🆕 Criando novo gameId a partir do número de celular:", gameId);
-    }
-  } else {
-    if (initializedGames.has(gameId)) {
-      type = "move";
-      console.log("🔄 GameId EXISTENTE, é MOVE:", gameId);
-    } else {
-      type = "newGame";
-      console.log("🆕 GameId NOVO recebido, registrando:", gameId);
+      console.error("Erro ao criar/recuperar jogo:", err.toString());
+      return res
+        .status(500)
+        .json({ message: "Erro interno ao iniciar o jogo." });
     }
   }
 
-  initializedGames.add(gameId);
+  const media = imageBase64
+    ? [{ type: "IMAGE", mimeType: "image/png", data: imageBase64 }]
+    : [];
 
-  const payload = { type, gameId, isValid: true, res: null };
-  if (type === "newGame") {
-    payload.gameMode = "1";
-  } else if (type === "move" && position != null) {
-    payload.position = position;
+  // monta a lista de jogadas livres:
+  const list = [];
+  for (let n = 1; n <= 9; n++) {
+    const row = Math.floor((n - 1) / 3);
+    const col = (n - 1) % 3;
+    if (board[row][col] === "") {
+      const s = String(n);
+      list.push({ id: String(n), text: String(n), value: s });
+    }
+  }
+
+  return res.json({
+    isReturnData: true,
+    data: {
+      gameId,
+      list,
+      media,
+      jump: "option:/move",
+    },
+  });
+});
+
+// Handler unificado que funciona para GET e PUT
+async function handleListagem(req, res) {
+  // O Oracle prepara OPTION com PUT e passa no body; para curl usamos GET com query
+  const from = req.body.from || req.query.from;
+  const gameId = req.body.gameId || req.query.gameId;
+
+  if (!from) {
+    return res.status(400).json({ message: "from é obrigatório" });
   }
 
   try {
-    console.log("🚀 Enviando para o motor C:", payload);
-    const result = await oracle.sendData('/game', payload, 'PUT');
+    // ATENÇÃO: aqui incluímos '/api' na rota para getgame, como você faz no startgame
+    const respState = await axios.get(
+      `${GAME_API_URL}/api/getgame/${encodeURIComponent(from)}`
+    );
+    const game = respState.data;
 
-    console.log("✅ Retorno do motor:", JSON.stringify(result, null, 2));
-
-    if (!result?.isReturnData) {
-      console.error("❌ isReturnData faltando ou falso:", result);
-      return res.status(502).json({ message: "'isReturnData' faltando ou falso", detail: result });
+    if (!game || !Array.isArray(game.board)) {
+      return res
+        .status(500)
+        .json({ message: "Estado do jogo inválido retornado pelo backend" });
     }
 
-    const mediaBase64 = result.data?.media?.[0]?.data;
-    console.log("🖼️  Base64 da imagem:", mediaBase64 ? "✅ RECEBIDO" : "❌ NÃO RECEBIDO");
-
-    const media = mediaBase64 ? [
-      {
-        type: "IMAGE",
-        mimeType: "image/png",
-        data: mediaBase64
+    // monta lista de casas livres
+    const list = [];
+    for (let n = 1; n <= 9; n++) {
+      const row = Math.floor((n - 1) / 3),
+        col = (n - 1) % 3;
+      if (game.board[row][col] === "") {
+        const s = String(n) + " ";
+        list.push({ id: s, text: s, value: "casa: " + s + "\n" });
       }
-    ] : [];
-
-    const jump = result.data.jump;
-    const responseGameId = result.data.gameId || gameId;
-
-    console.log("🦘 Jump recebido:", jump ?? "❌ Não veio jump");
-
-    console.log("📦 Respondendo para o cliente:", {
-      isReturnData: true,
-      data: { media, jump, gameId: responseGameId }
-    });
-
-    return res.json({
-      isReturnData: true,
-      data: { media, jump, gameId: responseGameId }
-    });
-
-  } catch (err) {
-    console.error("🔥 Erro interno em /game:", err);
-    return res.status(500).json({ message: "Erro interno em /game", error: err.toString() });
-  }
-});
-
-router.put('/move', async (req, res) => {
-  console.log("CHEGOU EM /move (externa):", req.body);
-
-  const { from, moveId } = req.body;
-  const gameId = from;
-
-  if (!gameId) {
-    return res.status(400).json({ message: '"from" (número do celular) é obrigatório como gameId' });
-  }
-
-  const position = moveId != null ? parseInt(moveId, 10) : undefined;
-
-  const payload = {
-    type: 'move',
-    gameId,
-    isValid: true,
-    res: null,
-    ...(Number.isInteger(position) ? { position } : {})
-  };
-
-  try {
-    console.log("Enviando para /move (interna):", payload);
-    const result = await oracle.sendData('/move', payload, 'PUT');
-
-    console.log("Resposta de /move (interna):", result);
-
-    if (!result?.isReturnData) {
-      return res.status(502).json({ message: 'isReturnData faltando ou falso', detail: result });
     }
 
-    const media = result.data.media || [];
-    const list  = result.data.list  || [];
-    const jump  = result.data.jump;
+    return res.json({
+      isReturnData: true,
+      data: {
+        gameId: gameId || from,
+        list,
+        jump: "option:/move",
+      },
+    });
+  } catch (err) {
+    console.error("Erro em listarJogadas:", err.toString());
+    return res
+      .status(500)
+      .json({ message: "Erro ao listar jogadas disponíveis" });
+  }
+}
+
+// responde tanto GET quanto PUT
+router.get("/listarJogadas", handleListagem);
+router.put("/listarJogadas", handleListagem);
+
+//
+// Recebe uma jogada, chama o backend e retorna imagem atualizada + lista + jump
+//
+router.put("/move", async (req, res) => {
+  const { from, moveId, gameId } = req.body;
+
+  if (!from) {
+    return res.status(400).json({ message: "from é obrigatório" });
+  }
+
+  // 1) Se não veio moveId, só lista as casas livres
+  if (moveId == null) {
+    try {
+      const respState = await axios.get(
+        `${GAME_API_URL}/api/getgame/${encodeURIComponent(from)}`
+      );
+      const game = respState.data;
+
+      const list = [];
+      for (let n = 1; n <= 9; n++) {
+        const row = Math.floor((n - 1) / 3),
+          col = (n - 1) % 3;
+        if (game.board[row][col] === "") {
+          const s = String(n);
+          list.push({ id: s, text: s, value: " casa: " + s + "\n" });
+        }
+      }
+
+      return res.json({
+        isReturnData: true,
+        data: {
+          gameId: gameId || from,
+          list,
+          jump: "option:/move",
+        },
+      });
+    } catch (err) {
+      console.error("Erro listando jogadas:", err);
+      return res
+        .status(500)
+        .json({ message: "Erro ao listar jogadas disponíveis" });
+    }
+  }
+
+  // 2) Se veio moveId, aplica a jogada normalmente
+  try {
+    const payload = {
+      number: parseInt(moveId, 10),
+      playerNumber: from,
+    };
+    const backendResponse = await axios.post(
+      `${GAME_API_URL}/api/move`,
+      payload
+    );
+    const { game } = backendResponse.data;
+
+    // monta imagem
+    const media = game.image
+      ? [{ type: "IMAGE", mimeType: "image/png", data: game.image }]
+      : [];
+
+    // monta nova lista de livres
+    const list = [];
+    if (game.status !== "finished") {
+      for (let n = 1; n <= 9; n++) {
+        const row = Math.floor((n - 1) / 3),
+          col = (n - 1) % 3;
+        if (game.board[row][col] === "") {
+          const s = String(n);
+          list.push({ id: s, text: s, value: " casa: " + s + "\n" });
+        }
+      }
+    }
+
+    const jump =
+      game.status === "finished"
+        ? game.winner === "X"
+          ? "info:/victory"
+          : "info:/draw"
+        : "option:/move";
 
     return res.json({
       isReturnData: true,
-      data: { media, list, jump }
+      data: {
+        gameId: gameId || from,
+        media,
+        list,
+        jump,
+      },
     });
   } catch (err) {
-    console.error('Erro na rota /move (externa):', err);
-    return res.status(500).json({ message: 'Erro interno ao processar jogada', error: err.toString() });
+    console.error("Erro aplicando jogada:", err.toString());
+    const status = err.response?.status || 500;
+    const message =
+      err.response?.data?.message || "Erro interno ao processar jogada";
+    return res.status(status).json({ message });
   }
 });
 
-module.exports = router
+module.exports = router;
